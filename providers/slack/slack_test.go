@@ -16,23 +16,13 @@ import (
 )
 
 var (
-	testAuthTestResponseData = map[string]interface{}{
-		"user":    "testuser",
-		"user_id": "user1234",
-	}
-
 	testUserInfoResponseData = map[string]interface{}{
-		"user": map[string]interface{}{
-			"id":   testAuthTestResponseData["user_id"],
-			"name": testAuthTestResponseData["user"],
-			"profile": map[string]interface{}{
-				"real_name":  "Test User",
-				"first_name": "Test",
-				"last_name":  "User",
-				"image_32":   "http://example.org/avatar.png",
-				"email":      "test@example.org",
-			},
-		},
+		"name":                            "test_user",
+		"https://slack.com/user_id":       "user1234",
+		"email":                           "test@example.org",
+		"https://slack.com/user_image_32": "http://example.org/avatar.png",
+		"given_name":                      "Test",
+		"family_name":                     "User",
 	}
 )
 
@@ -59,7 +49,7 @@ func Test_BeginAuth(t *testing.T) {
 	session, err := p.BeginAuth("test_state")
 	s := session.(*slack.Session)
 	a.NoError(err)
-	a.Contains(s.AuthURL, "slack.com/oauth/authorize")
+	a.Contains(s.AuthURL, "https://slack.com/openid/connect/authorize")
 }
 
 func Test_FetchUser(t *testing.T) {
@@ -80,10 +70,7 @@ func Test_FetchUser(t *testing.T) {
 			handler: http.HandlerFunc(
 				func(res http.ResponseWriter, req *http.Request) {
 					switch req.URL.Path {
-					case "/api/auth.test":
-						res.WriteHeader(http.StatusOK)
-						json.NewEncoder(res).Encode(testAuthTestResponseData)
-					case "/api/users.info":
+					case "/api/openid.connect.userInfo":
 						res.WriteHeader(http.StatusOK)
 						json.NewEncoder(res).Encode(testUserInfoResponseData)
 					default:
@@ -105,14 +92,14 @@ func Test_FetchUser(t *testing.T) {
 		},
 		{
 			name:     "FetchesBasicProfileWhenLackingUserReadScope",
-			provider: slack.New(os.Getenv("SLACK_KEY"), os.Getenv("SLACK_SECRET"), "/foo", "commands"),
+			provider: slack.New(os.Getenv("SLACK_KEY"), os.Getenv("SLACK_SECRET"), "/foo", false, "commands"),
 			session:  &slack.Session{AccessToken: "TOKEN"},
 			handler: http.HandlerFunc(
 				func(res http.ResponseWriter, req *http.Request) {
 					switch req.URL.Path {
-					case "/api/auth.test":
+					case "/api/openid.connect.userInfo":
 						res.WriteHeader(http.StatusOK)
-						json.NewEncoder(res).Encode(testAuthTestResponseData)
+						json.NewEncoder(res).Encode(testUserInfoResponseData)
 					default:
 						res.WriteHeader(http.StatusNotFound)
 					}
@@ -139,7 +126,7 @@ func Test_FetchUser(t *testing.T) {
 			handler: http.HandlerFunc(
 				func(res http.ResponseWriter, req *http.Request) {
 					switch req.URL.Path {
-					case "/api/auth.test":
+					case "/api/openid.connect.userInfo":
 						res.WriteHeader(http.StatusForbidden)
 					}
 				},
@@ -156,10 +143,7 @@ func Test_FetchUser(t *testing.T) {
 			handler: http.HandlerFunc(
 				func(res http.ResponseWriter, req *http.Request) {
 					switch req.URL.Path {
-					case "/api/auth.test":
-						res.WriteHeader(http.StatusOK)
-						json.NewEncoder(res).Encode(testAuthTestResponseData)
-					case "/api/users.info":
+					case "/api/openid.connect.userInfo":
 						res.WriteHeader(http.StatusForbidden)
 					}
 				},
@@ -212,7 +196,7 @@ func Test_SessionFromJSON(t *testing.T) {
 }
 
 func provider() *slack.Provider {
-	return slack.New(os.Getenv("SLACK_KEY"), os.Getenv("SLACK_SECRET"), "/foo")
+	return slack.New(os.Getenv("SLACK_KEY"), os.Getenv("SLACK_SECRET"), "/foo", false)
 }
 
 func withMockServer(p *slack.Provider, handler http.Handler, fn func(p *slack.Provider)) {
